@@ -1,0 +1,591 @@
+## Steps to create cluster in Databricks
+
+1. Login to Databricks community edition.
+2. Click on Create cluster.
+3. Cluster name: paathshala-cluster.
+4. Select latest spark and scala versions.
+5. Click Create Cluster.
+6. The community edition cluster gets terminated if idle for more than 2 hours.
+
+## Steps to create data pipeline
+
+1. Create notebook called paathshala-notebook-spark.
+2. Select Python as language and cluster as paathshala-cluster.
+3. We will use dbutils which gives us handle to interact with various databricks services.
+4. dbutils.help()
+
+   Lists all the utilities to interact with various databricks services.
+
+5. dbutils.fs.ls("dbfs:/")
+
+6. dbutils.fs.ls("dbfs:/databricks-datasets") or dbutils.fs.ls("/databricks-datasets")
+
+7. dbutils.fs.ls("/databricks-datasets/credit-card-fraud")
+
+8.
+  %fs
+  ls /databricks-datasets/credit-card-fraud
+
+9. To read one file using spark
+
+  credit_fraud = spark.read.csv("dbfs:/databricks-datasets/credit-card-fraud/odbl-10.txt")
+
+10. To show contents of dataframe
+
+  credit_fraud.show()
+
+11. Databricks Delta table
+
+   Built on top of Parquet file format.
+  Supports transactio management and versioning.
+
+12. Create -> Data -> default Database -> Create Table
+
+    In newer version of databricks, all tables are Delta tables by default.
+
+    Upload file -> store_customers.csv
+
+13. Create dataframe
+
+   customer_df = spark.sql("select * from default.store_customers")
+   customer_df.show()
+   customer_df.count()
+
+14. databricks function to see dataframe data in tabular format.
+
+   display(customer_df)
+
+## Data pipeline to write data to file system DBFS
+
+1. Create notebook spark_write_save
+2.
+
+  titanicData = spark.read.csv("/databricks-datasets/Rdatasets/data-001/csv/datasets/Titanic.csv",
+  header="true", inferSchema="true")
+
+3. titanicData.show()
+
+4.
+
+  survivors = titanicData.filter(titanicData["Survived"]== 'Yes')
+
+5.
+  survivors.write.format("csv").mode("overwrite").save("/titanic/data/survivors.csv")
+
+6.
+   create a delta table from survivors dataframe
+
+   survivors.write.format("delta").mode("overwrite").saveAsTable("titanic_survivors")
+
+
+## Data engineering with spark
+
+1. diamonds_df = spark.read.format("csv").option("header", "true")
+.load("/databricks-datasets/Rdatasets/data-001/csv/ggplot2/diamonds.csv")
+
+2. diamonds_df.show()
+
+3. diamonds_df.count()
+
+4. filtered_df = diamonds_df.filter((diamonds_df["cut"] == "Ideal") &
+    (diamonds_df["price"] > 1000))
+
+  filtered_df.count()
+
+5.
+  from pyspark.sql.functions import avg
+  grouped_df = filtered_df.groupBy("clarity").agg(avg("price"))
+
+  grouped_df.show()
+
+  ordered_df = grouped_df.orderBy(grouped_df["avg(price)"].desc())
+
+  ordered_df.show()
+
+6.
+
+  Scala notebook
+
+  val diamonds_df = spark.read.format("csv").option("header", "true")
+      .load("/databricks-datasets/Rdatasets/data-001/csv/ggplot2/diamonds.csv")
+
+  diamonds_df.count()
+
+  val filteredDf = diamonds_df.filter(diamonds_df("cut") == "Ideal" &
+      diamonds_df["price"] > 1000)
+
+  filteredDf.count()
+
+7.
+
+import org.apache.spark.sql.functions.avg
+val groupedDf = filteredDf.groupBy("clarity").agg(avg("price"))
+
+groupedDf.show()
+
+val orderedDf = groupedDf.orderBy(groupedDf("avg(price)").desc)
+
+orderedDf.show()
+
+8.
+
+ val orderedNewDf = orderedDf.withColumnRenamed("avg(price)", "avg_price")
+
+## Spark User Defined Functions
+
+1. UDF => Custom functions for data transformation
+
+2.
+
+  ls /databricks-datasets/nyctaxi/tripdata/yellow/
+
+  nytaxi_df = spark.read.format("csv") \
+                .option("header", "true") \
+                .option("inferSchema", "true") \
+                .option("codec", "gzip") \
+                .load("/databricks-datasets/nyctaxi/tripdata/yellow/yellow_tripdata_2009-01.csv.gz
+
+
+  nytaxi_df.show()
+
+  def concat_strings(s1, s2):
+     return s1 + "-" + s2
+
+  To register above function as UDF,
+
+  from pyspark.sql.functions import udf
+  from pyspark.sql.types import StringType
+
+  concat_udf = udf(concat_strings, StringType())
+
+  df1 = nyctaxi_df.withColumn("vendor_payment", concat_udf(nyctaxi_df.vendor_name, nyctaxi_df.Payment_Type))
+
+  df1.show()
+
+  df1.select("vendor_payment", "Total_Amt").show()
+
+3. Spark SQL way to concat strings
+
+    from pyspark.sql.functions import concat, col
+
+    df2 = nytaxi_df.withColumn("vendor_payment", concat(col("vendor_name"), col("Payment_Type")))
+
+    df2.select("vendor_payment", "Total_Amt").show()
+
+4.
+
+    from pyspark.sql.functions import concat, col, lit
+
+    df2 = nytaxi_df.withColumn("vendor_payment", concat(col("vendor_name"), lit("-"), col("Payment_Type")))
+
+    df2.select("vendor_payment", "Total_Amt").show()
+
+    df2.withColumn("country", lit("USA")).show()
+
+    df3 = df2.select("vendor_payment", "Total_Amt").withColumn("country", lit("USA"))
+
+    df3.show()
+
+## Join dataframes
+
+1.
+
+  Upload file customers_store.csv, store_transacations.csv,
+  store_customers_mini.csv, store_transacations_mini file.
+
+  Give table name store_customers, store_transacations,
+  store_customers_mini, store_transacations_mini
+
+  Create a notebook spark_join
+
+2.
+
+    customers_mini_df = spark.sql("select * from store_customers_mini")
+    customers_mini_df.show()
+
+    transacations_mini_df = spark.sql("select * from store_transacations_mini")
+    transacations_mini_df.show()
+
+    customers_df = spark.sql("select * from store_customers")
+    customers_df.show()
+
+    transacations_df = spark.sql("select * from store_transacations")
+    transacations_df.show()
+
+3. Inner join
+
+  customer_product_df = customers_df.join(transacations_df,
+    customers_df.CustomerID == transacations_df.CustomerID)
+
+  customer_product_df.show()
+
+4. Aggregration on joined dataframe
+
+  customer_product_df.groupBy("Country").agg({"Amount" : "sum"}).show()
+
+5.
+
+  Joins in Scala
+
+  %scala
+  val customerDF = spark.sql("select * from store_customers")
+  val transactionDF = spark.sql("select * from store_transacations")
+
+  val customerProductDF = customerDF.join(transactionDF, customerDF("CustomerID") ===
+    transactionDF("CustomerID"))
+
+ customerProductDF.count()
+
+6.
+
+  %scala
+
+  import org.apache.spark.sql.functions.{sum}
+
+  val customerProductDF = spark.sql("SELECT * FROM store_customers JOIN store_transacations ON
+  store_customers.CustomerID = store_transacations.CustomerID")
+
+  val countryAmountDF = customerProductDF.groupBy("Country").agg(sum("Amount"))
+  countryAmountDF.show()
+
+  customerDF.createOrReplaceTempView("customers")
+
+  transactionDF.createOrReplaceTempView("transactions")
+
+  val df = spark.sql("select * from customers")
+  df.show()
+
+  val countryCountDF = spark.sql("SELECT Country, SUM(Amount) as TotalAmount
+  FROM (SELECT * FROM customers JOIN transactions ON customers.CustomerID = transactions.CustomerID) GROUP BY Country")
+
+
+  ================
+  Section 2 Other Joins
+ =================
+
+ transacations_mini_df.show()
+
+ customer_mini_df.show()
+
+ cust_prod_mini = customer_mini_df.join(transacations_mini_df, customer_mini_df.CustomerID == transacations_mini_df.CustomerID)
+
+ cust_prod_mini.show()
+
+ ## by default inner join
+ ## to specify explicitly, use how in the option
+ cust_prod_mini = customer_mini_df.join(transacations_mini_df, customer_mini_df.CustomerID
+ == transacations_mini_df.CustomerID, how="inner")
+
+ cust_prod_mini.show()
+
+ cust_prod_mini_left = customer_mini_df.join(transacations_mini_df, customer_mini_df.CustomerID
+ == transacations_mini_df.CustomerID, how="left")
+
+ cust_prod_mini_left.show()
+
+ cust_prod_mini_right = customer_mini_df.join(transacations_mini_df, customer_mini_df.CustomerID
+ == transacations_mini_df.CustomerID, how="right")
+
+ cust_prod_mini_right.show()
+
+ cust_prod_mini_full = customer_mini_df.join(transacations_mini_df, customer_mini_df.CustomerID
+ == transacations_mini_df.CustomerID, how="full")
+
+ cust_prod_mini_full.show()
+
+ cust_prod_mini_left_semi = customer_mini_df.join(transacations_mini_df, customer_mini_df.CustomerID
+ == transacations_mini_df.CustomerID, how="left_semi")
+
+ cust_prod_mini_left_semi.show()
+
+ cust_prod_mini_left_anti = customer_mini_df.join(transacations_mini_df, customer_mini_df.CustomerID
+ == transacations_mini_df.CustomerID, how="left_anti")
+
+ cust_prod_mini_left_anti.show()
+
+ ==========================
+
+ Data lakehouse
+ ==========================
+
+ Databricks lakehouse architecture = Spark + delta lake
+
+ databricks has its own file system DBFS = Databricks file system.
+
+ it can connect with AWS S3 and Azure Blob
+
+ In Databricks delta lake, data is stored in parquet files.
+
+ Delta lake = Delta files (Parquet files)
+                 +
+              Delta tables (Parquet files + transaction log)
+                 +
+              Delta storage layer (Organizes + Manages + Keeps the data in object storage)
+                 +
+              Delta engine (Apache Spark compatible optimized query engine)
+
+ ########
+  diamonds_df = spark.read.format("csv").option("header", "true")
+          .load("/databricks-dataset/Rdatasets/data-0001/csv/ggplot2/diamonds.csv")
+
+  diamonds_df.count()
+
+  filtered_df = diamonds_df.filter((diamonds_df["cut"] == "Ideal") & (diamonds_df["price"] > 1000))
+
+  filtered_df.count()
+
+  ordered_df = grouped_df.orderBy(grouped_df["avg(price)"].desc())
+
+  ordered_df.show()
+
+  ordered_df_new = ordered_df.withColumnRenamed("avg(price)", "avg_price")
+
+  ordered_df_new.show()
+
+  ordered_df_new.write.format("delta").mode("overwrite").saveAsTable("clarity_fx_skills")
+
+  Go to left pane -> Data -> Tables
+
+  df1 = spark.sql("select * from default.clarity_fx_skills")
+
+  df1.show()
+
+  %sql
+
+  select * from default.clarity_fx_skills
+
+  %sql
+
+  DESCRIBE HISTORY clarity_fx_skills
+
+  above command gives entire history of delta table
+
+  ordered_df_new.write.format("delta").mode("append").saveAsTable("clarity_fx_skills")
+
+  DESCRIBE HISTORY clarity_fx_skills
+
+
+  Delta table maintains the data for each version in separate parquet which can be found at
+
+  /user/hive/warehouse
+
+  run command
+
+  %fs
+
+  ls /user/hive/warehouse
+
+  Table
+
+  path
+
+  dbfs:/user/hive/warehouse/clarity_fx_skills/
+
+  %fs
+  ls /user/hive/warehouse/clarity_fx_skills
+
+  %sql
+
+  select * from clarity_fx_skills TIMESTAMP AS OF '2023-02-07T2-:03:11.000+0000'
+
+  it gives value of previous version
+
+  This is how can time travel through data of delta table.
+
+  So you can use time-based queries against delta table. You can also use version to access delta tables.
+
+  select * from clarity_fx_skills@v0
+  select * from clarity_fx_skills@v1
+  select * from clarity_fx_skills@v2
+
+  To restore table to a previous version
+
+  %sql
+  RESTORE clarity_fx_skills TO VERSION AS OF 1
+
+  ##################
+
+  Difference between spark and databricks sql
+
+  ##################
+
+  diamonds_df.write.format("delta").mode("overwrite").saveAsTable("diamond")
+
+  diamonds_df.count()
+
+  diamonds_df.show()
+
+  #spark sql
+  spark.sql("select count(*) from diamond").show()
+
+  #databricks sql
+
+  %sql
+
+  select count(*) from diamond
+
+  DESCRIBE DETAIL diamond
+
+  ###################
+  DELTA table caching
+  ###################
+
+  1. Create a new spark cluster and in Spark config tab give
+
+     spark.databricks.rocksDB.fileManager.useCommitService false
+     spark.databricks.io.cache.enabled true
+     spark.databricks.delta.preview.enabled true
+
+     OR
+
+     you can do it in notebook as well
+
+  2.
+
+     %fs
+
+     ls /databricks-datasets/nyctaxi/tripdata/yellow/
+
+
+     ls /databricks-datasets/nyctaxi/tripdata/
+
+     nytaxi_df = spark.read.format("csv") \
+                   .option("header", "true") \
+                   .option("inferSchema", "true") \
+                   .option("codec", "gzip") \
+                   .load("/databricks-datasets/nyctaxi/tripdata/yellow/yellow_tripdata_2009-01.csv.gz")
+
+    nytaxi_df.count()
+
+    nytaxi_df.show()
+
+    nytaxi_df.write.format("delta").mode("append").saveAsTable("nytaxi_yellow_trips")
+
+  3. To verify the caching configuration from notebook
+
+     spark.conf.get("spark.databricks.io.cache.enabled")
+
+  4. To set the flag as false from notebook
+
+    spark.conf.set("spark.databricks.io.cache.enabled", "false
+
+  5. When the flag is set to true, the query results are cached.
+
+     So when you run the query first time, same time is taken if the flag = false.
+
+     But when you run the same query again keeping flag=true, the time taken is largely reduced.
+
+     distinct_vendor_count = nytaxi_df.select("vendor_name").distinct().count()
+
+     The above dataframe will take 48 seconds, reason being we are not leveraging delta table in the above
+     dataframe.
+
+  6.   In case of caching enabled, the query execution takes time first time as the data is loaded to cache.
+
+       Next time, all the queries take less time.
+
+       All the information regarding cache can be observed in Spark UI Storage tab.
+
+=========================
+Delta table partitioning
+=========================
+
+nytaxi_df = spark.read.format("csv") \
+              .option("header", "true") \
+              .option("inferSchema", "true") \
+              .option("codec", "gzip") \
+              .load("/databricks-datasets/nyctaxi/tripdata/yellow/yellow_tripdata_2009-01.csv.gz")
+
+
+nytaxi_df.write.format("delta").mode("append").saveAsTable("nytaxi_yellow_2")
+
+%sql
+
+SELECT vendor_name, count(*) as count
+FROM nytaxi_yellow_2
+WHERE Payment_Type = "Credit"
+GROUP BY vendor_name
+
+%sql
+
+DESCRIBE DETAIL nytaxi_yellow_2
+
+## from above command, you get location of file which is a single parquet file containing data.
+
+%fs
+
+ls /user/hive/warehouse/nytaxi_yellow_2
+
+
+nytaxi_df_2 = spark.read.format("csv") \
+              .option("header", "true") \
+              .option("inferSchema", "true") \
+              .option("codec", "gzip") \
+              .load("/databricks-datasets/nyctaxi/tripdata/yellow/yellow_tripdata_2009-02.csv.gz")
+
+nytaxi_df_2 = spark.read.format("csv") \
+              .option("header", "true") \
+              .option("inferSchema", "true") \
+              .option("codec", "gzip") \
+              .load("/databricks-datasets/nyctaxi/tripdata/yellow/yellow_tripdata_2009-02.csv.gz")
+
+nytaxi_df_2.write.format("delta").mode("append").saveAsTable("nytaxi_yellow_2")
+
+yellow_df = spark.sql("select * from nytaxi_yellow_2")
+yellow_df.write.format("delta").partitionBy("Payment_Type").mode("overwrite").saveAsTable("nytaxi_yellow_2_part")
+
+##To check partitions
+
+%fs
+
+ls /user/hive/warehouse/nytaxi_yellow_2
+
+you can see partitions like
+
+dbfs:/user/hive/warehouse/nytaxi_yellow_2_part/Payment_Type=CASH
+dbfs:/user/hive/warehouse/nytaxi_yellow_2_part/Payment_Type=CREDIT
+
+When you do ls on a selected partition, it will not scan other partitions
+
+Similarly for sql, if use partitioning column in the where clause, it will not scan other partitions.
+
+%sql
+
+SELECT vendor_name, count(*) as count
+FROM nytaxi_yellow_2_part
+WHERE Payment_Type='Credit'
+GROUP BY vendor_name
+
+######################
+DELTA Table Z-ordering
+######################
+
+Z-ordering = specity a set of columns that the data should be sorted by.
+             This data will reside adjacent on same disk.
+
+             The data is physically sorted based on column names.
+
+%sql
+
+OPTIMIZE nytaxi_yellow_2 ZORDER BY Payment_Type
+
+%sql
+
+DESCRIBE DETAIL nytaxi_yellow_2
+
+DESCRIBE HISTORY nytaxi_yellow_2
+
+%fs
+
+ls /user/hive/warehouse/nytaxi_yellow_2
+
+SELECT vendor_name, count(*) as count
+FROM nytaxi_yellow_2_part
+WHERE Payment_Type='Credit'
+GROUP BY vendor_name
+
+this query now takes time.
+
+Z-ordering should be applied on columns based on range like data.
+
+Payment Type is not an optimal solution. partitioning is more appropriate on Payment_Type
